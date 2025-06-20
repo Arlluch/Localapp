@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>PraxisLena Dashboard</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 2rem;
+        max-width: 600px;
+        margin: auto;
+        border: 2px solid #ccc;
+        border-radius: 12px;
+        margin-top: 5rem;
+        background-color: #f9f9f9;
+      }
+
+      h2 {
+        margin-top: 0;
+      }
+
+      .section {
+        margin: 1.5rem 0;
+      }
+
+      button {
+        padding: 0.6rem 1.2rem;
+        font-size: 1rem;
+        margin-top: 0.5rem;
+      }
+
+      .status {
+        font-weight: bold;
+        margin-top: 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Dashboard</h2>
+
+    <div class="section">
+      <label><strong>Choose path for Import folder:</strong></label
+      ><br />
+      <button onclick="chooseImport()">Select Import Folder</button>
+      <div id="importPath"></div>
+    </div>
+
+    <div class="section">
+      <label><strong>Choose path for Export folder:</strong></label
+      ><br />
+      <button onclick="chooseExport()">Select Export Folder</button>
+      <div id="exportPath"></div>
+    </div>
+
+    <div class="section">
+      <button onclick="logout()">Log out</button>
+    </div>
+
+    <script>
+      const { ipcRenderer } = require("electron");
+
+      async function verifyApiKey(apiId, apiKey) {
+        try {
+          const response = await fetch(
+            "https://ai-services-testing.terminlena.de/api/verify-key",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ apiId, apiKey }),
+            }
+          );
+
+          const data = await response.json();
+          return data.success === true;
+        } catch (err) {
+          console.error("API key verification failed:", err);
+          return false;
+        }
+      }
+      async function exportSummary() {
+        const attrs = await ipcRenderer.invoke("get-user-attributes");
+        const apiId = attrs["custom:API_ID"];
+        const apiKey = attrs["custom:APIKeys"];
+
+        const verified = await verifyApiKey(apiId, apiKey);
+        if (!verified) {
+          alert("API key verification failed. Please contact support.");
+          return;
+        }
+
+        const response = await fetch(
+          `https://ai-services-testing.terminlena.de/api/export-summary?apiId=${apiId}`
+        );
+
+        if (response.ok) {
+          const blob = await response.blob();
+          const arrayBuffer = await blob.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+
+          const { canceled, filePath } = await ipcRenderer.invoke(
+            "save-file-dialog",
+            {
+              defaultPath: "summary.txt",
+            }
+          );
+
+          if (!canceled && filePath) {
+            require("fs").writeFileSync(filePath, buffer);
+            alert("Summary exported.");
+          }
+        } else {
+          alert("Failed to export summary.");
+        }
+      }
+
+      async function importSummary() {
+        const attrs = await ipcRenderer.invoke("get-user-attributes");
+        const apiId = attrs["custom:API_ID"];
+        const apiKey = attrs["custom:APIKeys"];
+
+        const verified = await verifyApiKey(apiId, apiKey);
+        if (!verified) {
+          alert("API key verification failed. Please contact support.");
+          return;
+        }
+
+        const { canceled, filePaths } = await ipcRenderer.invoke(
+          "open-file-dialog"
+        );
+        if (!canceled && filePaths.length) {
+          const content = require("fs").readFileSync(filePaths[0], "utf-8");
+
+          const res = await fetch(
+            "https://ai-services-testing.terminlena.de/api/import-summary",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ apiId, summaryText: content }),
+            }
+          );
+
+          if ((await res.json()).success) {
+            alert("Summary uploaded.");
+          } else {
+            alert("Failed to upload summary.");
+          }
+        }
+      }
+
+      async function fetchAttributes() {
+        console.log("Fetching user attributes...");
+        const attributes = await ipcRenderer.invoke("get-user-attributes");
+
+        if (attributes) {
+          console.log("Received attributes:", attributes);
+
+          // Show dynamic status based on account enabled/disabled
+          const statusDiv = document.getElementById("status");
+          const isDisabled = attributes["custom:disabled"] === "true";
+
+          statusDiv.textContent = isDisabled
+            ? "Status: Disabled"
+            : "Status: Connected";
+
+          // Optionally: disable buttons if user is disabled
+          document.querySelectorAll("button").forEach((btn) => {
+            if (btn.textContent !== "Log out") {
+              btn.disabled = isDisabled;
+            }
+          });
+        } else {
+          console.warn("No user data available.");
+          document.getElementById("status").textContent = "Status: Unknown";
+        }
+      }
+
+      function chooseImport() {
+        ipcRenderer.invoke("select-folder").then((path) => {
+          if (path) {
+            document.getElementById("importPath").innerText = path;
+            importSummary();
+          }
+        });
+      }
+
+      function chooseExport() {
+        ipcRenderer.invoke("select-folder").then((path) => {
+          if (path) {
+            document.getElementById("exportPath").innerText = path;
+            exportSummary();
+          }
+        });
+      }
+
+      function logout() {
+        console.log("Logging out...");
+        ipcRenderer.send("logout");
+      }
+
+      fetchAttributes();
+    </script>
+  </body>
+</html>

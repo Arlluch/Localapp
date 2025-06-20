@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Login - PraxisLena</title>
+    <style>
+      body {
+        font-family: Arial;
+        padding: 2rem;
+      }
+      input {
+        display: block;
+        margin-bottom: 1rem;
+        width: 100%;
+      }
+      button {
+        padding: 0.5rem 1rem;
+      }
+      #result {
+        margin-top: 1rem;
+      }
+      .auth-links {
+        margin-top: 2rem;
+        font-size: 0.95rem;
+      }
+      .auth-links a {
+        display: inline-block;
+        margin-top: 0.3rem;
+        color: #007bff;
+        text-decoration: none;
+      }
+      .auth-links a:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Login to PraxisLena</h2>
+    <input id="email" placeholder="Email" type="email" />
+    <input id="password" placeholder="Password" type="password" />
+    <button onclick="login()">Login</button>
+    <div id="result"></div>
+
+    <div class="auth-links">
+      <a
+        href="https://apptesting.praxislena.com/passwort-zur%C3%BCcksetzen"
+        target="_blank"
+        >Forgot password?</a
+      ><br />
+      <a
+        href="https://apptesting.praxislena.com/firma-registrieren"
+        target="_blank"
+        >Register</a
+      >
+    </div>
+
+    <script>
+      const { ipcRenderer, shell } = require("electron");
+
+      async function login() {
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
+        const resultDiv = document.getElementById("result");
+        const loginButton = document.querySelector("button");
+
+        resultDiv.innerText = "Logging in...";
+        loginButton.disabled = true;
+
+        console.log("Attempting login for:", email);
+
+        try {
+          const result = await ipcRenderer.invoke("login", { email, password });
+
+          if (result.success) {
+            console.log("Login successful.");
+            resultDiv.innerText = "Logged in!";
+          } else {
+            console.error("Login failed:", result.message);
+            resultDiv.innerText = result.message;
+          }
+        } catch (err) {
+          console.error("Unexpected error during login:", err);
+          resultDiv.innerText = "Unexpected error. Please try again.";
+        } finally {
+          loginButton.disabled = false;
+        }
+      }
+
+      // Force external links to open in the default browser
+      document.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll("a[href]").forEach((link) => {
+          link.addEventListener("click", (e) => {
+            e.preventDefault();
+            const url = link.getAttribute("href");
+            shell.openExternal(url);
+          });
+        });
+      });
+    </script>
+  </body>
+</html>
